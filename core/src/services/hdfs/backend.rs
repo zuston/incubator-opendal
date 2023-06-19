@@ -39,6 +39,8 @@ use crate::*;
 pub struct HdfsBuilder {
     root: Option<String>,
     name_node: Option<String>,
+    user: Option<String>,
+    kerberos_ticket_cache_path: Option<String>
 }
 
 impl HdfsBuilder {
@@ -67,6 +69,20 @@ impl HdfsBuilder {
             self.name_node = Some(name_node.trim_end_matches('/').to_string())
         }
 
+        self
+    }
+
+    pub fn user(&mut self, user: &str) -> &mut Self {
+        if !user.is_empty() {
+            self.user = Some(user.to_string());
+        }
+        self
+    }
+
+    pub fn kerberos_ticket_cache_path(&mut self, kerberos_ticket_cache_path: &str) -> &mut Self {
+        if !kerberos_ticket_cache_path.is_empty() {
+            self.user = Some(kerberos_ticket_cache_path.to_string());
+        }
         self
     }
 }
@@ -98,7 +114,14 @@ impl Builder for HdfsBuilder {
         let root = normalize_root(&self.root.take().unwrap_or_default());
         debug!("backend use root {}", root);
 
-        let client = hdrs::Client::connect(name_node).map_err(parse_io_error)?;
+        let mut builder = &hdrs::ClientBuilder::new(name_node);
+        if self.user.is_some() {
+            builder = builder.with_user(&self.user?);
+        }
+        if self.kerberos_ticket_cache_path.is_some() {
+            builder = builder.with_kerberos_ticket_cache_path(&self.kerberos_ticket_cache_path?);
+        }
+        let client = builder.connect().map_err(parse_io_error)?;
 
         // Create root dir if not exist.
         if let Err(e) = client.metadata(&root) {
